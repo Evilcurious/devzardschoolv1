@@ -56,8 +56,8 @@ export function initials(name?: string) {
 
 export function statusTone(s?: string) {
   const v = (s || "").toUpperCase();
-  if (["ACTIVE", "PAID", "PRESENT", "SUBMITTED", "REVIEWED"].includes(v)) return "ok";
-  if (["PENDING", "PAYMENT_SUBMITTED", "PAYMENT_UNDER_VERIFICATION", "LATE", "UNPAID"].includes(v)) return "warn";
+  if (["ACTIVE", "PAID", "PRESENT", "SUBMITTED", "REVIEWED", "VERIFIED", "APPROVED", "ACCEPTED"].includes(v)) return "ok";
+  if (["PENDING", "UNDER_REVIEW", "PAYMENT_SUBMITTED", "PAYMENT_UNDER_VERIFICATION", "LATE", "UNPAID"].includes(v)) return "warn";
   if (["SUSPENDED", "DISABLED", "EXPIRED", "REJECTED", "PAYMENT_REJECTED", "OVERDUE", "ABSENT", "LOCKED", "INACTIVE"].includes(v))
     return "bad";
   return "mute";

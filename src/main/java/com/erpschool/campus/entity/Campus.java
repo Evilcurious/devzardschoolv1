@@ -95,6 +95,27 @@ public class Campus extends TenantAwareEntity {
     @Column(name = "whatsapp_url", length = 300)
     private String whatsappUrl;
 
+    /** ACTIVE, SUSPENDED or ARCHIVED (soft-deleted; data is kept). */
+    @Column(nullable = false, length = 20)
+    private String status = "ACTIVE";
+
+    /** The one branch created automatically when the school was approved. */
+    @Column(name = "is_main", nullable = false)
+    private boolean main = false;
+
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.UUID)
+    @Column(name = "branch_admin_user_id")
+    private java.util.UUID branchAdminUserId;
+
+    @JsonIgnore
+    @Column(name = "deleted_at")
+    private java.time.Instant deletedAt;
+
+    @JsonIgnore
+    public boolean isUsable() {
+        return "ACTIVE".equals(status) && deletedAt == null;
+    }
+
     @Transient
     @JsonIgnore
     private boolean websiteGeoUpdate;

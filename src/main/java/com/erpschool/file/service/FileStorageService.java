@@ -41,9 +41,12 @@ public class FileStorageService {
 
     private final StoredFileRepository repository;
     private final Path root;
+    private final com.erpschool.saas.limits.LimitService limitService;
 
     public FileStorageService(StoredFileRepository repository,
-                              @Value("${app.upload-dir:uploads}") String uploadDir) {
+                              @Value("${app.upload-dir:uploads}") String uploadDir,
+                              com.erpschool.saas.limits.LimitService limitService) {
+        this.limitService = limitService;
         this.repository = repository;
         this.root = Path.of(uploadDir).toAbsolutePath().normalize();
     }
@@ -75,6 +78,8 @@ public class FileStorageService {
         } catch (IOException e) {
             throw new BusinessException("FILE_TYPE", "Could not read the uploaded file");
         }
+        // Storage quota of the school's plan. Checked under a per-school lock, before anything is written.
+        limitService.assertStorage(tenantId, file.getSize());
         try {
             Path dir = root.resolve(tenantId.toString());
             Files.createDirectories(dir);

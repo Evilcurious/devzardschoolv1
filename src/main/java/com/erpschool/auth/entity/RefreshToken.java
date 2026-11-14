@@ -35,6 +35,11 @@ public class RefreshToken {
     @Column(name = "tenant_id")
     private UUID tenantId;
 
+    /** Branch the session was opened for; null = every branch the role may see. */
+    @JdbcTypeCode(SqlTypes.UUID)
+    @Column(name = "campus_id")
+    private UUID campusId;
+
     @Column(name = "token_hash", nullable = false, unique = true, length = 64)
     private String tokenHash;
 

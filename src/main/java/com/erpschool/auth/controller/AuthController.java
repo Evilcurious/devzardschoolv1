@@ -27,30 +27,90 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final com.erpschool.saas.security.FileAccessService fileAccess;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, com.erpschool.saas.security.FileAccessService fileAccess) {
         this.authService = authService;
+        this.fileAccess = fileAccess;
+    }
+
+    /** Sets (or clears) the HttpOnly cookie that lets this browser read the session school's files. */
+    private AuthResponse withFileAccess(AuthResponse auth, HttpServletRequest http,
+                                        jakarta.servlet.http.HttpServletResponse response) {
+        if (auth.getAccessToken() != null) {
+            fileAccess.grant(http, response, auth.getTenant() == null ? null : auth.getTenant().getId());
+        }
+        return auth;
     }
 
     @PostMapping("/login")
     @Operation(summary = "Login with username and password")
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request,
-                                                           HttpServletRequest http) {
+                                                           HttpServletRequest http,
+                                                           jakarta.servlet.http.HttpServletResponse response) {
         return ResponseEntity.ok(ApiResponse.ok("Login successful",
-                authService.login(request.getUsername(), request.getPassword(), http)));
+                withFileAccess(authService.login(request.getUsername(), request.getPassword(), http), http, response)));
     }
 
     @PostMapping("/refresh")
     @Operation(summary = "Issue a new access token using a refresh token")
     public ResponseEntity<ApiResponse<AuthResponse>> refresh(@Valid @RequestBody RefreshRequest request,
-                                                             HttpServletRequest http) {
-        return ResponseEntity.ok(ApiResponse.ok(authService.refresh(request.getRefreshToken(), http)));
+                                                             HttpServletRequest http,
+                                                             jakarta.servlet.http.HttpServletResponse response) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                withFileAccess(authService.refresh(request.getRefreshToken(), http), http, response)));
+    }
+
+    @PostMapping("/select")
+    @Operation(summary = "Central login step 2: enter one of the authorised schools / branches")
+    public ResponseEntity<ApiResponse<AuthResponse>> select(@Valid @RequestBody SelectRequest request,
+                                                            HttpServletRequest http,
+                                                            jakarta.servlet.http.HttpServletResponse response) {
+        return ResponseEntity.ok(ApiResponse.ok("Login successful",
+                withFileAccess(authService.select(request.getSelectionToken(), request.getTenantId(),
+                        request.getBranchId(), request.getBranchPassword(), http), http, response)));
+    }
+
+    @PostMapping("/switch")
+    @Operation(summary = "Switch to another authorised school or branch")
+    public ResponseEntity<ApiResponse<AuthResponse>> switchContext(@Valid @RequestBody SwitchRequest request,
+                                                                   HttpServletRequest http,
+                                                                   jakarta.servlet.http.HttpServletResponse response) {
+        return ResponseEntity.ok(ApiResponse.ok("Switched",
+                withFileAccess(authService.switchContext(CurrentUser.require().getId(), request.getTenantId(),
+                        request.getBranchId(), request.getBranchPassword(), http), http, response)));
+    }
+
+    @GetMapping("/contexts")
+    @Operation(summary = "Schools and branches the signed-in user is authorised for")
+    public ResponseEntity<ApiResponse<java.util.List<com.erpschool.saas.access.SchoolOption>>> contexts() {
+        return ResponseEntity.ok(ApiResponse.ok(authService.contexts(CurrentUser.require().getId())));
+    }
+
+    @lombok.Getter
+    @lombok.Setter
+    public static class SwitchRequest {
+        @jakarta.validation.constraints.NotNull(message = "School is required")
+        private java.util.UUID tenantId;
+        private java.util.UUID branchId;
+        @jakarta.validation.constraints.Size(max = 200)
+        private String branchPassword;
+    }
+
+    @lombok.Getter
+    @lombok.Setter
+    public static class SelectRequest extends SwitchRequest {
+        @jakarta.validation.constraints.NotBlank(message = "Selection token is required")
+        private String selectionToken;
     }
 
     @PostMapping("/logout")
     @Operation(summary = "Revoke the given refresh token")
-    public ResponseEntity<ApiResponse<Void>> logout(@Valid @RequestBody LogoutRequest request) {
+    public ResponseEntity<ApiResponse<Void>> logout(@Valid @RequestBody LogoutRequest request,
+                                                    HttpServletRequest http,
+                                                    jakarta.servlet.http.HttpServletResponse response) {
         authService.logout(request.getRefreshToken());
+        fileAccess.clear(http, response);
         return ResponseEntity.ok(ApiResponse.ok("Logged out", null));
     }
 

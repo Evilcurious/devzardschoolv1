@@ -34,13 +34,16 @@ public class DataSeeder implements ApplicationRunner {
     private final PasswordEncoder passwordEncoder;
     private final UserService userService;
     private final SeedRetry seedRetry;
+    private final com.erpschool.saas.plan.SchoolProvisioning provisioning;
 
     public DataSeeder(AppProperties properties,
                       UserRepository userRepository,
                       TenantRepository tenantRepository,
                       PasswordEncoder passwordEncoder,
                       UserService userService,
-                      SeedRetry seedRetry) {
+                      SeedRetry seedRetry,
+                      com.erpschool.saas.plan.SchoolProvisioning provisioning) {
+        this.provisioning = provisioning;
         this.properties = properties;
         this.userRepository = userRepository;
         this.tenantRepository = tenantRepository;
@@ -52,6 +55,8 @@ public class DataSeeder implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         if (!properties.getSeed().isEnabled()) {
+            // Production: no demo school, but the platform still needs its owner.
+            ensurePlatformOwnerWithoutDemo();
             return;
         }
         seedRetry.run("erp-owner", this::seedErpOwner);
@@ -67,6 +72,26 @@ public class DataSeeder implements ApplicationRunner {
         userRepository.findByEmailIgnoreCase("admin@greenvalley.school").ifPresent(admin ->
                 log.info("Demo School Admin ready username={} tenant={} campus={}",
                         admin.getUsername(), admin.getTenantId(), admin.getCampusId()));
+    }
+
+    /**
+     * With demo data off, create the Platform Owner only when none exists and only
+     * with a password the operator chose. The well-known demo password is never
+     * used for a real platform.
+     */
+    private void ensurePlatformOwnerWithoutDemo() {
+        String username = properties.getSeed().getErpOwnerUsername();
+        if (userRepository.findByUsernameIgnoreCase(username).isPresent()
+                || userRepository.findByEmailIgnoreCase(properties.getSeed().getErpOwnerEmail()).isPresent()) {
+            return;
+        }
+        String password = properties.getSeed().getErpOwnerPassword();
+        if (password == null || password.length() < 10 || "Owner@12345".equals(password)) {
+            log.warn("No Platform Owner account exists. Set ERP_OWNER_PASSWORD (10+ characters, not the demo "
+                    + "password) and restart to create '{}'.", username);
+            return;
+        }
+        seedRetry.run("erp-owner", this::seedErpOwner);
     }
 
     private void seedErpOwner() {
@@ -122,7 +147,10 @@ public class DataSeeder implements ApplicationRunner {
             created.setAcademicSession("2026-2027");
             created.setStatus(TenantStatus.ACTIVE);
             created.setTimezone("Asia/Karachi");
-            tenant = tenantRepository.save(created);
+            tenant = tenantRepository.saveAndFlush(created);
+            // The demo school has three branches and about two hundred users, which is more
+            // than the Free plan allows. It is a showcase, so it runs on the internal plan.
+            provisioning.usePlan(tenant.getId(), "CUSTOM", "Demo school");
             log.info("Seeded demo tenant {}", code);
         } else if (tenant.getStatus() != TenantStatus.ACTIVE) {
             tenant.setStatus(TenantStatus.ACTIVE);

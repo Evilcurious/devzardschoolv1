@@ -6,10 +6,19 @@ import { homeFor, LOGIN_PORTALS } from "./lib/routes";
 import { Loading } from "./ui/kit";
 import ErrorBoundary from "./ui/ErrorBoundary";
 import type { Role } from "./lib/types";
+import type { SaasRole } from "./api/saas";
 
 const Welcome = lazy(() => import("./pages/Welcome"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
-const PortalPage = lazy(() => import("./pages/PortalPage"));
+const PlatformHome = lazy(() => import("./pages/PlatformHome"));
+const RegisterSchool = lazy(() => import("./pages/RegisterSchool"));
+const BranchesPage = lazy(() => import("./pages/school/Branches").then((m) => ({ default: m.BranchesPage })));
+const PlanUsagePage = lazy(() => import("./pages/school/Branches").then((m) => ({ default: m.PlanUsagePage })));
+const PlatformOverviewPage = lazy(() => import("./pages/platform/PlatformAdmin").then((m) => ({ default: m.PlatformOverviewPage })));
+const PlatformSchoolsPage = lazy(() => import("./pages/platform/PlatformAdmin").then((m) => ({ default: m.PlatformSchoolsPage })));
+const PlatformSchoolDetailPage = lazy(() => import("./pages/platform/PlatformAdmin").then((m) => ({ default: m.PlatformSchoolDetailPage })));
+const PlatformPlansPage = lazy(() => import("./pages/platform/PlatformAdmin").then((m) => ({ default: m.PlatformPlansPage })));
+const PlatformSitePage = lazy(() => import("./pages/platform/PlatformAdmin").then((m) => ({ default: m.PlatformSitePage })));
 const OwnerApp = lazy(() => import("./pages/OwnerApp"));
 const OwnerHome = lazy(() => import("./pages/OwnerApp").then((m) => ({ default: m.OwnerHome })));
 const Schools = lazy(() => import("./pages/OwnerApp").then((m) => ({ default: m.Schools })));
@@ -51,15 +60,18 @@ function Guard({ roles, children }: { roles?: Role[]; children: ReactNode }) {
   return <>{children}</>;
 }
 
-function PublicOnly({ children }: { children: ReactNode }) {
-  const { user } = useSession();
-  if (user) return <Navigate to={homeFor(user)} replace />;
-  return <>{children}</>;
-}
-
 function RoleGate({ roles, children }: { roles: Role[]; children: ReactNode }) {
   const { user } = useSession();
   if (!user || !roles.includes(user.role)) {
+    return <Navigate to={user ? homeFor(user) : LOGIN_PORTALS} replace />;
+  }
+  return <>{children}</>;
+}
+
+/** Platform roles (School Owner, Branch Admin, ...). The server enforces the same rule. */
+function SaasGate({ roles, children }: { roles: SaasRole[]; children: ReactNode }) {
+  const { user, context } = useSession();
+  if (!user || !context || !roles.includes(context.role)) {
     return <Navigate to={user ? homeFor(user) : LOGIN_PORTALS} replace />;
   }
   return <>{children}</>;
@@ -85,12 +97,23 @@ export default function App() {
     <ErrorBoundary>
       <Suspense fallback={<Loading label="Loading…" />}>
         <Routes>
-          <Route path="/" element={<PublicOnly><Welcome /></PublicOnly>} />
+          {/* Platform website: public, and never shows any school. */}
+          <Route path="/" element={<PlatformHome />} />
+          <Route path="/features" element={<PlatformHome />} />
+          <Route path="/pricing" element={<PlatformHome />} />
+          <Route path="/about" element={<PlatformHome />} />
+          <Route path="/contact" element={<PlatformHome />} />
+          <Route path="/register" element={<RegisterSchool />} />
+          {/* One central sign-in for every role. Old per-role addresses still work. */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/login/:role" element={<Navigate to="/login" replace />} />
+          <Route path="/portals" element={<Navigate to="/login" replace />} />
+          <Route path="/admin" element={<Navigate to="/login" replace />} />
+          {/* A school's own public website, reachable only with that school's address. */}
+          <Route path="/s/:code" element={<Welcome />} />
+          <Route path="/s/:code/apply" element={<ApplyAdmission />} />
+          <Route path="/apply" element={<Navigate to="/" replace />} />
           <Route path="/preview" element={<Guard roles={["SCHOOL_ADMIN", "PRINCIPAL"]}><FeatureGate feature="WEBSITE" wait><Welcome preview /></FeatureGate></Guard>} />
-          <Route path="/apply" element={<PublicOnly><ApplyAdmission /></PublicOnly>} />
-          <Route path="/portals" element={<PublicOnly><PortalPage /></PublicOnly>} />
-          <Route path="/login/:role" element={<PublicOnly><LoginPage /></PublicOnly>} />
-          <Route path="/admin" element={<PublicOnly><LoginPage owner /></PublicOnly>} />
           <Route path="/dashboard" element={<HomeRedirect />} />
           <Route path="/teacher" element={<HomeRedirect />} />
           <Route path="/principal" element={<HomeRedirect />} />
@@ -109,6 +132,11 @@ export default function App() {
             <Route path="schools" element={<Schools />} />
             <Route path="schools/:id" element={<SchoolDetail />} />
             <Route path="subscriptions" element={<Subscriptions />} />
+            <Route path="platform" element={<PlatformOverviewPage />} />
+            <Route path="verification" element={<PlatformSchoolsPage />} />
+            <Route path="verification/:id" element={<PlatformSchoolDetailPage />} />
+            <Route path="plans" element={<PlatformPlansPage />} />
+            <Route path="site" element={<PlatformSitePage />} />
             <Route path="password" element={<ChangePassword />} />
           </Route>
           <Route
@@ -124,6 +152,8 @@ export default function App() {
             <Route path="students" element={<RoleGate roles={["SCHOOL_ADMIN", "PRINCIPAL", "TEACHER", "ACCOUNT_OFFICER"]}><FeatureGate feature="STUDENTS"><StudentsPage /></FeatureGate></RoleGate>} />
             <Route path="users" element={<RoleGate roles={["SCHOOL_ADMIN", "PRINCIPAL"]}><UsersPage /></RoleGate>} />
             <Route path="campuses" element={<RoleGate roles={["SCHOOL_ADMIN"]}><CampusesPage /></RoleGate>} />
+            <Route path="branches" element={<SaasGate roles={["SCHOOL_OWNER", "SCHOOL_ADMIN", "BRANCH_ADMIN"]}><BranchesPage /></SaasGate>} />
+            <Route path="plan" element={<SaasGate roles={["SCHOOL_OWNER", "SCHOOL_ADMIN"]}><PlanUsagePage /></SaasGate>} />
             <Route path="academics" element={<RoleGate roles={["SCHOOL_ADMIN", "PRINCIPAL"]}><AcademicsPage /></RoleGate>} />
             <Route path="timetable" element={<RoleGate roles={["SCHOOL_ADMIN", "PRINCIPAL", "TEACHER", "STUDENT", "PARENT"]}><FeatureGate feature="TIMETABLE"><TimetablePage /></FeatureGate></RoleGate>} />
             <Route path="attendance" element={<RoleGate roles={["SCHOOL_ADMIN", "PRINCIPAL", "TEACHER", "PARENT", "STUDENT"]}><FeatureGate feature="ATTENDANCE"><AttendancePage /></FeatureGate></RoleGate>} />

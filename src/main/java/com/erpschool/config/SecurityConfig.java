@@ -26,17 +26,23 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final SubscriptionGuardFilter subscriptionGuardFilter;
     private final FeatureGuardFilter featureGuardFilter;
+    private final com.erpschool.saas.access.TenantAccessGuardFilter tenantAccessGuardFilter;
+    private final com.erpschool.saas.security.RateLimitFilter rateLimitFilter;
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
     private final RestAccessDeniedHandler accessDeniedHandler;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
                           SubscriptionGuardFilter subscriptionGuardFilter,
                           FeatureGuardFilter featureGuardFilter,
+                          com.erpschool.saas.access.TenantAccessGuardFilter tenantAccessGuardFilter,
+                          com.erpschool.saas.security.RateLimitFilter rateLimitFilter,
                           RestAuthenticationEntryPoint authenticationEntryPoint,
                           RestAccessDeniedHandler accessDeniedHandler) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.subscriptionGuardFilter = subscriptionGuardFilter;
         this.featureGuardFilter = featureGuardFilter;
+        this.tenantAccessGuardFilter = tenantAccessGuardFilter;
+        this.rateLimitFilter = rateLimitFilter;
         this.authenticationEntryPoint = authenticationEntryPoint;
         this.accessDeniedHandler = accessDeniedHandler;
     }
@@ -59,6 +65,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/v1/auth/login",
                                 "/api/v1/auth/refresh",
+                                "/api/v1/auth/select",
                                 "/api/v1/setup",
                                 "/api/v1/setup/**",
                                 "/api/v1/public/**",
@@ -74,7 +81,9 @@ public class SecurityConfig {
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterAfter(subscriptionGuardFilter, JwtAuthenticationFilter.class)
-                .addFilterAfter(featureGuardFilter, SubscriptionGuardFilter.class);
+                .addFilterBefore(rateLimitFilter, JwtAuthenticationFilter.class)
+                .addFilterAfter(tenantAccessGuardFilter, SubscriptionGuardFilter.class)
+                .addFilterAfter(featureGuardFilter, com.erpschool.saas.access.TenantAccessGuardFilter.class);
         return http.build();
     }
 

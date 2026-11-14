@@ -26,11 +26,17 @@ public class SetupService {
     private final CampusRepository campusRepository;
     private final UserRepository userRepository;
     private final UserService userService;
+    private final com.erpschool.saas.plan.SchoolProvisioning provisioning;
+    private final boolean enabled;
 
     public SetupService(TenantRepository tenantRepository,
                         CampusRepository campusRepository,
                         UserRepository userRepository,
-                        UserService userService) {
+                        UserService userService,
+                        com.erpschool.saas.plan.SchoolProvisioning provisioning,
+                        @org.springframework.beans.factory.annotation.Value("${app.setup.enabled:false}") boolean enabled) {
+        this.provisioning = provisioning;
+        this.enabled = enabled;
         this.tenantRepository = tenantRepository;
         this.campusRepository = campusRepository;
         this.userRepository = userRepository;
@@ -41,7 +47,9 @@ public class SetupService {
     public Map<String, Object> status() {
         Map<String, Object> m = new LinkedHashMap<>();
         long schools = tenantRepository.count();
-        m.put("needsSetup", schools == 0);
+        // First-time setup creates a school without any sign-in. On a public platform schools
+        // register and are verified instead, so setup is off unless explicitly enabled.
+        m.put("needsSetup", enabled && schools == 0);
         m.put("schoolCount", schools);
         m.put("hasOwner", userRepository.findByUsernameIgnoreCase("erp.owner").isPresent());
         return m;
@@ -49,6 +57,10 @@ public class SetupService {
 
     @Transactional
     public Map<String, Object> complete(String schoolName, List<String> branchNames) {
+        if (!enabled) {
+            throw new com.erpschool.common.exception.ForbiddenException(
+                    "First-time setup is disabled. Register your school instead.");
+        }
         if (tenantRepository.count() > 0) {
             throw new BusinessException("School already exists. Sign in instead of running first-time setup.");
         }
@@ -77,7 +89,9 @@ public class SetupService {
         tenant.setTimezone("Asia/Karachi");
         tenant.setAcademicYear("2026-2027");
         tenant.setAcademicSession("2026-2027");
-        tenant = tenantRepository.save(tenant);
+        tenant = tenantRepository.saveAndFlush(tenant);
+        // This installer path creates three branches, more than the Free plan allows.
+        provisioning.usePlan(tenant.getId(), "CUSTOM", "First-time setup");
 
         List<Map<String, Object>> campuses = new ArrayList<>();
         String[] codes = {"MAIN", "CANAL", "CANTT"};

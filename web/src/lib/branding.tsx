@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useLocation } from "react-router-dom";
 import { publicApi } from "../api/services";
 import { applyBrand, applyFont } from "./theme";
+import { schoolCodeFromPath } from "./routes";
 
 const CAMPUS_KEY = "atrium.publicCampus";
 
@@ -105,7 +106,7 @@ interface Branding {
 const Ctx = createContext<Branding | null>(null);
 
 function isPublicPath(pathname: string) {
-  return pathname === "/" || pathname === "/apply" || pathname.startsWith("/portals") || pathname.startsWith("/login") || pathname === "/admin";
+  return schoolCodeFromPath(pathname) !== null;
 }
 
 export function BrandingProvider({ children }: { children: ReactNode }) {
@@ -118,12 +119,27 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState("");
   const hasSchool = useRef(false);
+  const loadedCode = useRef<string | null>(null);
+  const pathCode = schoolCodeFromPath(loc.pathname);
 
   const reload = useCallback(async (opts?: { silent?: boolean }) => {
+    // A school website is only ever loaded for the school named in the address
+    // (/s/<CODE>). Without it nothing about any school is requested or shown.
+    const code = schoolCodeFromPath(window.location.pathname);
+    if (!code) {
+      setLoading(false);
+      return;
+    }
+    if (loadedCode.current !== code) {
+      hasSchool.current = false;
+      setSchool(null);
+      setCampuses([]);
+    }
     if (!opts?.silent) setLoading(!hasSchool.current);
     setError("");
     try {
-      const data = await publicApi.school();
+      const data = await publicApi.school(code);
+      loadedCode.current = code;
       const next = data.school;
       const list = data.campuses || [];
       setSchool(next);
@@ -144,19 +160,23 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unable to load school";
       setError(msg);
-      setMissing(/not found|no school/i.test(msg));
+      setMissing(true);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (hasSchool.current) {
+    if (!publicSite) {
       setLoading(false);
       return;
     }
-    void reload({ silent: !publicSite });
-  }, [publicSite, reload]);
+    if (hasSchool.current && loadedCode.current === pathCode) {
+      setLoading(false);
+      return;
+    }
+    void reload();
+  }, [publicSite, pathCode, reload]);
 
   const setCampusId = useCallback((id: string) => {
     setCampusIdState(id);

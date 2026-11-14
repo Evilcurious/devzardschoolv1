@@ -156,6 +156,32 @@ public class Tenant extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String notes;
 
+    /**
+     * Platform verification state. Schools created directly by the Platform
+     * Owner (the pre-SaaS path) are trusted; self-registered schools are set
+     * to PENDING by the registration service.
+     */
+    @Column(name = "verification_status", nullable = false, length = 20)
+    private String verificationStatus = "VERIFIED";
+
+    @Column(name = "school_type", length = 40)
+    private String schoolType;
+
+    @Column(name = "registration_number", length = 120)
+    private String registrationNumber;
+
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.UUID)
+    @Column(name = "owner_user_id")
+    private java.util.UUID ownerUserId;
+
+    /** Opt-in: list this school's branches on its own public school page. Off by default. */
+    @Column(name = "public_branches_visible", nullable = false)
+    private boolean publicBranchesVisible = false;
+
+    public boolean isVerified() {
+        return "VERIFIED".equals(verificationStatus);
+    }
+
     public boolean allowsSchoolLogin() {
         return status == TenantStatus.ACTIVE || status == TenantStatus.PENDING;
     }

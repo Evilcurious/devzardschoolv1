@@ -27,12 +27,16 @@ public class PublicSchoolService {
     public PublicSchoolService(TenantRepository tenantRepository,
                                CampusRepository campusRepository,
                                CatalogCache catalogCache,
-                               AdmissionService admissionService) {
+                               AdmissionService admissionService,
+                               com.erpschool.saas.access.PublicSchoolResolver publicResolver) {
+        this.publicResolver = publicResolver;
         this.tenantRepository = tenantRepository;
         this.campusRepository = campusRepository;
         this.catalogCache = catalogCache;
         this.admissionService = admissionService;
     }
+
+    private final com.erpschool.saas.access.PublicSchoolResolver publicResolver;
 
     @Transactional(readOnly = true)
     public Map<String, Object> branding(String code) {
@@ -97,7 +101,9 @@ public class PublicSchoolService {
         school.put("map", map);
 
         List<Map<String, Object>> campuses = new ArrayList<>();
-        for (Campus campus : campusRepository.findByTenantIdOrderByNameAsc(tenant.getId())) {
+        // Branches are public only if the school chose to publish them; otherwise just the main branch.
+        for (Campus campus : publicResolver.publicBranches(tenant,
+                campusRepository.findByTenantIdOrderByNameAsc(tenant.getId()))) {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("id", campus.getId());
             row.put("name", campus.getName());
@@ -161,12 +167,7 @@ public class PublicSchoolService {
     }
 
     private Tenant resolve(String code) {
-        if (code != null && !code.isBlank()) {
-            return tenantRepository.findByCodeIgnoreCase(code.trim())
-                    .orElseThrow(() -> new ResourceNotFoundException("School", code));
-        }
-        return tenantRepository.findFirstByStatusInOrderByCreatedAtAsc(
-                        List.of(TenantStatus.ACTIVE, TenantStatus.PENDING))
-                .orElseThrow(() -> new ResourceNotFoundException("No school is configured yet"));
+        // Verified, active schools only, and only by their own code. No default school is ever served.
+        return publicResolver.resolve(code);
     }
 }

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { publicApi, setupApi, websiteApi } from "../api/services";
 import { useBranding, type PublicCampus, type PublicSchool } from "../lib/branding";
+import { schoolPath } from "../lib/routes";
 import { applyBrand, applyFont } from "../lib/theme";
 import ThemeToggle from "../ui/ThemeToggle";
 import {
@@ -205,10 +206,16 @@ export default function Welcome({ preview = false }: { preview?: boolean }) {
     );
   }
 
-  if (error && !school) {
+  if ((error || missing) && !school) {
+    // Same answer for a wrong address, an unverified school and a suspended one:
+    // visitors never learn which schools exist.
     return (
       <div className="site-boot">
-        <div className="error-box"><strong>Unable to load the school website</strong><p>{error}</p></div>
+        <div className="card site-boot-card">
+          <h1 className="serif" style={{ marginTop: 0 }}>School website not found</h1>
+          <p className="hint">Check the address you were given by the school, or go back to the home page.</p>
+          <Link to="/" className="btn brass">Home</Link>
+        </div>
       </div>
     );
   }
@@ -273,11 +280,11 @@ export default function Welcome({ preview = false }: { preview?: boolean }) {
             <a key={item.href} href={item.href} style={{ "--i": i } as CSSProperties} onClick={closeMenu}>{item.label}</a>
           ))}
           {school?.admissions?.enabled && !preview ? (
-            <Link to="/apply" className="btn brass" style={{ "--i": SITE_MENU.length } as CSSProperties} onClick={closeMenu}>
+            <Link to={schoolPath(school?.code, "/apply")} className="btn brass" style={{ "--i": SITE_MENU.length } as CSSProperties} onClick={closeMenu}>
               {school.admissions.ctaLabel || "Apply for Admission"}
             </Link>
           ) : null}
-          {preview ? null : <Link to="/portals" className="btn ghost" style={{ "--i": SITE_MENU.length + 1 } as CSSProperties} onClick={closeMenu}>School Portal</Link>}
+          {preview ? null : <Link to="/login" className="btn ghost" style={{ "--i": SITE_MENU.length + 1 } as CSSProperties} onClick={closeMenu}>School Portal</Link>}
           <div style={{ "--i": SITE_MENU.length + 2 } as CSSProperties}><ThemeToggle /></div>
         </nav>
       </div>
@@ -296,7 +303,7 @@ export default function Welcome({ preview = false }: { preview?: boolean }) {
         </a>
         <div className="site-nav-tools">
           {school?.admissions?.enabled && !preview ? (
-            <Link to="/apply" className="btn brass sm site-nav-apply">{school.admissions.ctaLabel || "Apply for Admission"}</Link>
+            <Link to={schoolPath(school?.code, "/apply")} className="btn brass sm site-nav-apply">{school.admissions.ctaLabel || "Apply for Admission"}</Link>
           ) : null}
           {campuses.length ? (
             <select className="site-branch" value={campus?.id || ""} onChange={(e) => setCampusId(e.target.value)} aria-label="Select campus">
@@ -304,7 +311,7 @@ export default function Welcome({ preview = false }: { preview?: boolean }) {
             </select>
           ) : null}
           <ThemeToggle />
-          {preview ? <span className="kicker">Preview</span> : <Link to="/portals" className="btn ghost sm site-nav-portal">School Portal</Link>}
+          {preview ? <span className="kicker">Preview</span> : <Link to="/login" className="btn ghost sm site-nav-portal">School Portal</Link>}
         </div>
         <div className="burger-slot" aria-hidden="true" />
       </header>
@@ -350,7 +357,7 @@ export default function Welcome({ preview = false }: { preview?: boolean }) {
           {heroes[slide]?.caption || school?.tagline ? <p>{heroes[slide]?.caption || school?.tagline}</p> : null}
           {school?.admissions?.enabled && !preview ? (
             <div className="row" style={{ marginTop: 16 }}>
-              <Link to="/apply" className="btn brass">{school.admissions.ctaLabel || "Apply for Admission"}</Link>
+              <Link to={schoolPath(school?.code, "/apply")} className="btn brass">{school.admissions.ctaLabel || "Apply for Admission"}</Link>
             </div>
           ) : null}
         </div>
@@ -543,9 +550,9 @@ export default function Welcome({ preview = false }: { preview?: boolean }) {
           <p>Students, parents and staff use the school portal. Public pages stay on this website.</p>
         </div>
         <div className="row">
-          {preview ? null : <Link to="/portals" className="btn brass">School Portal</Link>}
+          {preview ? null : <Link to="/login" className="btn brass">School Portal</Link>}
           {school?.admissions?.enabled && !preview ? (
-            <Link to="/apply" className="btn ghost">{school.admissions.ctaLabel || "Apply for Admission"}</Link>
+            <Link to={schoolPath(school?.code, "/apply")} className="btn ghost">{school.admissions.ctaLabel || "Apply for Admission"}</Link>
           ) : null}
           <a href="#contact" className="btn ghost">Contact the school</a>
         </div>
@@ -563,7 +570,7 @@ export default function Welcome({ preview = false }: { preview?: boolean }) {
           <a href="#about">About</a>
           <a href="#principal">Principal</a>
           <a href="#contact">Contact</a>
-          {preview ? null : <Link to="/portals" className="btn brass sm">Login</Link>}
+          {preview ? null : <Link to="/login" className="btn brass sm">Login</Link>}
         </nav>
       </footer>
       <WhatsAppFloat href={contact.whatsapp} />

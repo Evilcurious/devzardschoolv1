@@ -7,6 +7,7 @@ import com.erpschool.common.cache.CatalogCache;
 import com.erpschool.common.exception.DuplicateResourceException;
 import com.erpschool.common.exception.ResourceNotFoundException;
 import com.erpschool.common.util.TenantGuard;
+import com.erpschool.tenant.context.CampusScope;
 import com.erpschool.tenant.context.TenantContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,8 +22,11 @@ public class CampusService {
     private final CampusRepository campusRepository;
     private final AuditService auditService;
     private final CatalogCache catalogCache;
+    private final com.erpschool.saas.limits.LimitService limitService;
 
-    public CampusService(CampusRepository campusRepository, AuditService auditService, CatalogCache catalogCache) {
+    public CampusService(CampusRepository campusRepository, AuditService auditService, CatalogCache catalogCache,
+                         com.erpschool.saas.limits.LimitService limitService) {
+        this.limitService = limitService;
         this.campusRepository = campusRepository;
         this.auditService = auditService;
         this.catalogCache = catalogCache;
@@ -31,6 +35,8 @@ public class CampusService {
     @Transactional
     public Campus create(Campus incoming) {
         UUID tenantId = TenantGuard.requireTenantId(null);
+        requireSchoolWide("Only the school owner can add a branch.");
+        limitService.assertBranchSlot(tenantId);
         if (campusRepository.existsByTenantIdAndCodeIgnoreCase(tenantId, incoming.getCode())) {
             throw new DuplicateResourceException("Campus code already exists");
         }
@@ -45,7 +51,22 @@ public class CampusService {
 
     @Transactional(readOnly = true)
     public List<Campus> list() {
-        return campusRepository.findByTenantIdOrderByNameAsc(TenantGuard.requireTenantId(null));
+        UUID branch = CampusScope.restricts() ? CampusScope.current() : null;
+        // A branch session sees its own branch only; archived branches are never listed here.
+        return campusRepository.findByTenantIdOrderByNameAsc(TenantGuard.requireTenantId(null)).stream()
+                .filter(c -> !"ARCHIVED".equals(c.getStatus()))
+                .filter(c -> branch == null || branch.equals(c.getId()))
+                .toList();
+    }
+
+    private static void requireSchoolWide(String message) {
+        if (TenantContext.getRole() == com.erpschool.user.entity.UserRole.ERP_OWNER) {
+            return;
+        }
+        com.erpschool.saas.SaasRole role = TenantContext.getSaasRole();
+        if (role == null || !role.schoolWide() || TenantContext.getCampusId() != null) {
+            throw new com.erpschool.common.exception.ForbiddenException(message);
+        }
     }
 
     @Transactional
@@ -77,6 +98,10 @@ public class CampusService {
     public Campus get(UUID id) {
         Campus campus = campusRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Campus", id));
         TenantGuard.assertSameTenant(campus.getTenantId());
+        if (CampusScope.restricts() && !campus.getId().equals(CampusScope.current())) {
+            // Same answer as a branch that does not exist: other branches are not disclosed.
+            throw new ResourceNotFoundException("Campus", id);
+        }
         return campus;
     }
 }

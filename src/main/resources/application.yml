@@ -66,7 +66,7 @@ spring:
   servlet:
     multipart:
       max-file-size: 25MB
-      max-request-size: 26MB
+      max-request-size: 60MB
 
 server:
   port: ${PORT:8080}
@@ -113,11 +113,29 @@ app:
   cors:
     allowed-origins: ${CORS_ORIGINS:*}
 
+  # First-time setup creates a school with no sign-in. Leave it off on a public
+  # platform: schools register themselves and are verified by the platform owner.
+  setup:
+    enabled: ${ALLOW_FIRST_TIME_SETUP:false}
+
+  # Single-school installs only: the school shown when a public request names no school.
+  # Leave empty on a multi-school platform so no school is ever shown by default.
+  public:
+    default-school-code: ${DEFAULT_PUBLIC_SCHOOL:}
+
+  security:
+    rate-limit:
+      enabled: ${RATE_LIMIT_ENABLED:true}
+      login-per-minute: ${RATE_LIMIT_LOGIN_PER_MINUTE:20}
+      register-per-hour: ${RATE_LIMIT_REGISTER_PER_HOUR:10}
+      public-write-per-minute: ${RATE_LIMIT_PUBLIC_WRITE_PER_MINUTE:30}
+      public-read-per-minute: ${RATE_LIMIT_PUBLIC_READ_PER_MINUTE:240}
+
   seed:
     enabled: ${SEED_DEMO_DATA:true}
-    erp-owner-username: erp.owner
+    erp-owner-username: ${ERP_OWNER_USERNAME:erp.owner}
     erp-owner-password: ${ERP_OWNER_PASSWORD:Owner@12345}
-    erp-owner-email: owner@erpschool.local
+    erp-owner-email: ${ERP_OWNER_EMAIL:owner@erpschool.local}
     demo-school-code: GVS
     demo-school-name: Green Valley School
     demo-user-password: ${DEMO_USER_PASSWORD:ChangeMe@123}

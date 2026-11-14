@@ -1,6 +1,9 @@
 package com.erpschool.auth.service;
 
 import com.erpschool.audit.service.AuditService;
+import com.erpschool.saas.SaasRole;
+import com.erpschool.saas.access.AccessContext;
+import com.erpschool.saas.access.AccessContextService;
 import com.erpschool.auth.dto.AuthResponse;
 import com.erpschool.auth.entity.RefreshToken;
 import com.erpschool.auth.repository.RefreshTokenRepository;
@@ -56,6 +59,7 @@ public class AuthService {
     private final AppProperties appProperties;
     private final AuditService auditService;
     private final FeatureService featureService;
+    private final AccessContextService accessContextService;
     private final TransactionTemplate readTx;
     private final TransactionTemplate writeTx;
 
@@ -68,6 +72,7 @@ public class AuthService {
                        AppProperties appProperties,
                        AuditService auditService,
                        FeatureService featureService,
+                       AccessContextService accessContextService,
                        PlatformTransactionManager transactionManager) {
         this.userRepository = userRepository;
         this.studentRepository = studentRepository;
@@ -78,6 +83,7 @@ public class AuthService {
         this.appProperties = appProperties;
         this.auditService = auditService;
         this.featureService = featureService;
+        this.accessContextService = accessContextService;
         this.readTx = new TransactionTemplate(transactionManager);
         this.readTx.setReadOnly(true);
         this.writeTx = new TransactionTemplate(transactionManager);
@@ -135,24 +141,56 @@ public class AuthService {
             });
             throw new UnauthorizedException("Invalid username or password");
         }
-        Tenant tenant = loaded != null ? loaded.tenant() : null;
-        if (user.getRole() != UserRole.ERP_OWNER && tenant == null) {
-            throw new UnauthorizedException("School account is not available");
-        }
-        assertTenantAllowsLogin(user, tenant);
-        Map<String, Boolean> features = snapshotFeatures(user.getTenantId());
-
         Instant now = Instant.now();
         String ip = HttpRequestUtils.clientIp(request);
         String ua = HttpRequestUtils.userAgent(request);
         UUID userId = user.getId();
-        UUID tenantId = user.getTenantId();
         String accountUsername = user.getUsername();
-        String role = user.getRole().name();
+
+        /* Central login: the school and branch are resolved here, on the server,
+           from membership records. The client never names a tenant at this step. */
+        AccessContext ctx = null;
+        Tenant resolvedTenant = null;
+        if (user.getRole() != UserRole.ERP_OWNER) {
+            AccessContextService.Resolution resolution = accessContextService.resolveLogin(userId);
+            if (resolution.selectionRequired()) {
+                LOGIN_FOLLOW_UP.execute(() -> {
+                    try {
+                        writeTx.executeWithoutResult(status -> {
+                            userRepository.markSuccessfulLogin(userId, now, UserStatus.ACTIVE);
+                            auditService.recordSameTransaction(null, userId, accountUsername, null,
+                                    AuditService.LOGIN_SUCCESS, "User", userId.toString(),
+                                    Map.of("step", "selection_required"), ip, ua);
+                        });
+                    } catch (RuntimeException ignored) {
+                        /* Selection can still proceed. */
+                    }
+                });
+                return AuthResponse.builder()
+                        .selectionRequired(true)
+                        .selectionToken(jwtService.createSelectionToken(userId))
+                        .schools(resolution.options())
+                        .build();
+            }
+            ctx = resolution.context();
+            resolvedTenant = loaded != null && loaded.tenant() != null
+                    && ctx.tenantId().equals(loaded.tenant().getId())
+                    ? loaded.tenant()
+                    : tenantRepository.findById(ctx.tenantId()).orElse(null);
+            if (resolvedTenant == null) {
+                throw new UnauthorizedException("School account is not available");
+            }
+            assertTenantAllowsLogin(ctx.erpRole(), resolvedTenant);
+        }
+        final AccessContext context = ctx;
+        final Tenant tenant = resolvedTenant;
+        UUID tenantId = context == null ? null : context.tenantId();
+        Map<String, Boolean> features = snapshotFeatures(tenantId);
+        String role = context == null ? user.getRole().name() : context.role().name();
         /* Tokens first so the HTTP response is not blocked on users.last_login_at
            (the Neon write that previously stalled login for several seconds).
            last_login and LOGIN_SUCCESS audit still run; they just follow the response. */
-        AuthResponse response = writeTx.execute(status -> issueTokens(user, request, tenant, features));
+        AuthResponse response = writeTx.execute(status -> issueTokens(user, request, tenant, features, context));
         if (response == null) {
             throw new UnauthorizedException("Unable to complete login");
         }
@@ -188,11 +226,69 @@ public class AuthService {
             refreshTokenRepository.save(stored);
             throw new UnauthorizedException("Account is not active");
         }
-        Tenant tenant = loadTenantForLogin(user);
-        assertTenantAllowsLogin(user, tenant);
+        /* A refresh re-validates the session: the membership, the school and the
+           branch must all still be valid, otherwise the user signs in again. */
+        AccessContext ctx = null;
+        Tenant tenant = null;
+        if (user.getRole() != UserRole.ERP_OWNER) {
+            UUID tenantId = stored.getTenantId() != null ? stored.getTenantId() : user.getTenantId();
+            ctx = accessContextService.revalidate(user.getId(), tenantId, stored.getCampusId());
+            tenant = tenantRepository.findById(ctx.tenantId())
+                    .orElseThrow(() -> new UnauthorizedException("School account is not available"));
+            assertTenantAllowsLogin(ctx.erpRole(), tenant);
+        }
         stored.revoke();
         refreshTokenRepository.save(stored);
-        return issueTokens(user, request, tenant, snapshotFeatures(user.getTenantId()));
+        return issueTokens(user, request, tenant, snapshotFeatures(ctx == null ? null : ctx.tenantId()), ctx);
+    }
+
+    /**
+     * Second step of the central login: enter one of the schools / branches the
+     * server listed. The selection token only proves the password was checked;
+     * the requested school and branch are re-authorised against memberships.
+     */
+    public AuthResponse select(String selectionToken, UUID tenantId, UUID campusId, String branchPassword,
+                               HttpServletRequest request) {
+        UUID userId = jwtService.parseSelectionToken(selectionToken);
+        if (userId == null) {
+            throw new UnauthorizedException("Your sign-in has expired. Please sign in again.");
+        }
+        return enter(userId, tenantId, campusId, branchPassword, request, "CONTEXT_SELECTED");
+    }
+
+    /** Switch school or branch without signing in again. Same authorisation as {@link #select}. */
+    public AuthResponse switchContext(UUID userId, UUID tenantId, UUID campusId, String branchPassword,
+                                      HttpServletRequest request) {
+        return enter(userId, tenantId, campusId, branchPassword, request, "CONTEXT_SWITCHED");
+    }
+
+    private AuthResponse enter(UUID userId, UUID tenantId, UUID campusId, String branchPassword,
+                               HttpServletRequest request, String auditAction) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new UnauthorizedException("Account is not available"));
+        if (!user.isActive() || user.getRole() == UserRole.ERP_OWNER) {
+            throw new UnauthorizedException("Account is not available");
+        }
+        AccessContext ctx = accessContextService.select(userId, tenantId, campusId, branchPassword);
+        Tenant tenant = tenantRepository.findById(ctx.tenantId())
+                .orElseThrow(() -> new UnauthorizedException("School account is not available"));
+        assertTenantAllowsLogin(ctx.erpRole(), tenant);
+        Map<String, Boolean> features = snapshotFeatures(ctx.tenantId());
+        AuthResponse response = writeTx.execute(status -> issueTokens(user, request, tenant, features, ctx));
+        if (response == null) {
+            throw new UnauthorizedException("Unable to complete sign-in");
+        }
+        Map<String, Object> details = new java.util.LinkedHashMap<>();
+        details.put("school", ctx.tenantName());
+        details.put("branch", ctx.campusName() == null ? "All branches" : ctx.campusName());
+        auditService.record(ctx.tenantId(), userId, user.getUsername(), ctx.role().name(),
+                auditAction, "User", userId.toString(), details);
+        return response;
+    }
+
+    /** The caller's authorised schools and branches, for the in-app switcher. */
+    public java.util.List<com.erpschool.saas.access.SchoolOption> contexts(UUID userId) {
+        return accessContextService.options(userId);
     }
 
     @Transactional
@@ -274,7 +370,13 @@ public class AuthService {
     public UserResponse me(User actor) {
         User user = userRepository.findById(actor.getId())
                 .orElseThrow(() -> new UnauthorizedException("User not found"));
-        return UserResponse.from(user);
+        UserRole sessionRole = com.erpschool.tenant.context.TenantContext.getRole();
+        if (sessionRole == null || sessionRole == UserRole.ERP_OWNER || user.getRole() == UserRole.ERP_OWNER) {
+            return UserResponse.from(user);
+        }
+        // Report the school / branch / role of this session, not the account's home columns.
+        return UserResponse.from(user, com.erpschool.tenant.context.TenantContext.getTenantId(),
+                com.erpschool.tenant.context.TenantContext.getCampusId(), sessionRole);
     }
 
     public User requireUser(java.util.UUID userId) {
@@ -283,13 +385,18 @@ public class AuthService {
     }
 
     private AuthResponse issueTokens(User user, HttpServletRequest request, Tenant tenant,
-                                    Map<String, Boolean> features) {
-        String accessToken = jwtService.createAccessToken(user);
+                                    Map<String, Boolean> features, AccessContext ctx) {
+        String accessToken = ctx == null
+                ? jwtService.createAccessToken(user.getId(), user.getUsername(), UserRole.ERP_OWNER,
+                        SaasRole.PLATFORM_OWNER, null, null)
+                : jwtService.createAccessToken(user.getId(), user.getUsername(), ctx.erpRole(),
+                        ctx.role(), ctx.tenantId(), ctx.campusId());
         String refreshToken = TokenHasher.randomToken();
 
         RefreshToken entity = new RefreshToken();
         entity.setUserId(user.getId());
-        entity.setTenantId(user.getTenantId());
+        entity.setTenantId(ctx == null ? null : ctx.tenantId());
+        entity.setCampusId(ctx == null ? null : ctx.campusId());
         entity.setTokenHash(TokenHasher.sha256(refreshToken));
         entity.setExpiresAt(Instant.now().plusSeconds(appProperties.getJwt().getRefreshTokenTtlSeconds()));
         entity.setUserAgent(HttpRequestUtils.userAgent(request));
@@ -301,7 +408,10 @@ public class AuthService {
                 .refreshToken(refreshToken)
                 .tokenType("Bearer")
                 .expiresIn(jwtService.getAccessTtlSeconds())
-                .user(UserResponse.from(user))
+                .user(ctx == null ? UserResponse.from(user)
+                        : UserResponse.from(user, ctx.tenantId(), ctx.campusId(), ctx.erpRole()))
+                .context(ctx == null ? AccessContextService.describePlatformOwner()
+                        : AccessContextService.describe(ctx))
                 .tenant(tenant == null ? null : TenantResponse.from(tenant))
                 .features(features == null || features.isEmpty() ? null : features)
                 .build();
@@ -332,16 +442,8 @@ public class AuthService {
         user.setLockedUntil(persistent.getLockedUntil());
     }
 
-    private Tenant loadTenantForLogin(User user) {
-        if (user.getRole() == UserRole.ERP_OWNER) {
-            return null;
-        }
-        return tenantRepository.findById(user.getTenantId())
-                .orElseThrow(() -> new UnauthorizedException("School account is not available"));
-    }
-
-    private void assertTenantAllowsLogin(User user, Tenant tenant) {
-        if (user.getRole() == UserRole.ERP_OWNER) {
+    private void assertTenantAllowsLogin(UserRole erpRole, Tenant tenant) {
+        if (erpRole == UserRole.ERP_OWNER) {
             return;
         }
         if (tenant == null) {
@@ -353,7 +455,7 @@ public class AuthService {
         /* School admin may authenticate while the tenant is locked so they can
          * submit subscription payment proof. Module APIs stay blocked by
          * SubscriptionGuardFilter. Other school roles cannot log in. */
-        if (user.getRole() == UserRole.SCHOOL_ADMIN) {
+        if (erpRole == UserRole.SCHOOL_ADMIN) {
             return;
         }
         throw new UnauthorizedException(

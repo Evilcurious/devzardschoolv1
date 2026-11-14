@@ -45,13 +45,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     String username = claims.get(JwtService.CLAIM_USERNAME, String.class);
                     UserRole role = UserRole.valueOf(claims.get(JwtService.CLAIM_ROLE, String.class));
 
+                    com.erpschool.saas.SaasRole saasRole = jwtService.saasRole(claims);
+                    if (saasRole == null) {
+                        // Token issued before the SaaS upgrade: derive the platform role.
+                        saasRole = com.erpschool.saas.SaasRole.fromErpRole(role, campusId != null);
+                    }
+                    if ((role == UserRole.ERP_OWNER) != (saasRole == com.erpschool.saas.SaasRole.PLATFORM_OWNER)) {
+                        throw new IllegalArgumentException("Inconsistent role claims");
+                    }
                     AuthenticatedUser principal = new AuthenticatedUser(
-                            userId, tenantId, username, "", role, true, false);
+                            userId, tenantId, username, "", role, true, false, saasRole);
                     UsernamePasswordAuthenticationToken authentication =
                             new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                     TenantContext.set(tenantId, userId, username, role, campusId);
+                    TenantContext.setSaasRole(saasRole);
                     if (role == UserRole.ERP_OWNER) {
                         String override = request.getHeader("X-Tenant-Id");
                         if (override != null && !override.isBlank()) {

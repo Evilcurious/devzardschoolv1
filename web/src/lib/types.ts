@@ -72,6 +72,7 @@ export interface AuthPayload {
 }
 
 export interface Tenant {
+  verificationStatus?: "PENDING" | "UNDER_REVIEW" | "VERIFIED" | "REJECTED" | "SUSPENDED";
   id: string;
   code: string;
   name: string;

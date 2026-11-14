@@ -8,6 +8,9 @@ import com.erpschool.common.exception.BusinessException;
 import com.erpschool.common.exception.UnauthorizedException;
 import com.erpschool.config.AppProperties;
 import com.erpschool.feature.FeatureService;
+import com.erpschool.saas.SaasRole;
+import com.erpschool.saas.access.AccessContext;
+import com.erpschool.saas.access.AccessContextService;
 import com.erpschool.security.JwtService;
 import com.erpschool.student.entity.Student;
 import com.erpschool.student.repository.StudentRepository;
@@ -59,6 +62,8 @@ class AuthServiceTest {
     private AuditService auditService;
     @Mock
     private FeatureService featureService;
+    @Mock
+    private AccessContextService accessContextService;
 
     private PasswordEncoder passwordEncoder;
     private AuthService authService;
@@ -86,8 +91,9 @@ class AuthServiceTest {
             }
         };
         authService = new AuthService(userRepository, studentRepository, tenantRepository, refreshTokenRepository,
-                passwordEncoder, jwtService, properties, auditService, featureService, txManager);
+                passwordEncoder, jwtService, properties, auditService, featureService, accessContextService, txManager);
         lenient().when(featureService.snapshot(any())).thenReturn(Map.of("ATTENDANCE", true, "RESULTS", true));
+        lenient().when(featureService.snapshotIfCached(any())).thenReturn(Map.of("ATTENDANCE", true, "RESULTS", true));
 
         tenantId = UUID.randomUUID();
         teacher = new User();
@@ -99,6 +105,17 @@ class AuthServiceTest {
         teacher.setLastName("Raza");
         teacher.setRole(UserRole.TEACHER);
         teacher.setStatus(UserStatus.ACTIVE);
+
+        // The central login resolves the school from membership records. In these unit
+        // tests every school user has exactly one membership: their own school.
+        lenient().when(accessContextService.resolveLogin(any())).thenAnswer(inv -> {
+            UUID userId = inv.getArgument(0);
+            boolean isTeacher = teacher.getId().equals(userId);
+            AccessContext ctx = new AccessContext(tenantId, "Green Valley School", null, null,
+                    isTeacher ? SaasRole.TEACHER : SaasRole.SCHOOL_OWNER,
+                    isTeacher ? UserRole.TEACHER : UserRole.SCHOOL_ADMIN, "VERIFIED", false);
+            return new AccessContextService.Resolution(ctx, List.of());
+        });
     }
 
     @Test
@@ -108,8 +125,6 @@ class AuthServiceTest {
         tenant.setId(tenantId);
         tenant.setStatus(TenantStatus.ACTIVE);
         when(tenantRepository.findById(tenantId)).thenReturn(Optional.of(tenant));
-        when(userRepository.findById(teacher.getId())).thenReturn(Optional.of(teacher));
-        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(refreshTokenRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         AuthResponse response = authService.login("GVS-TCH-0001", "ChangeMe@123", null);
@@ -179,8 +194,6 @@ class AuthServiceTest {
         tenant.setId(tenantId);
         tenant.setStatus(TenantStatus.SUSPENDED);
         when(tenantRepository.findById(tenantId)).thenReturn(Optional.of(tenant));
-        when(userRepository.findById(admin.getId())).thenReturn(Optional.of(admin));
-        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(refreshTokenRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         AuthResponse response = authService.login("GVS-ADM-0001", "ChangeMe@123", null);
@@ -197,8 +210,6 @@ class AuthServiceTest {
         tenant.setId(tenantId);
         tenant.setStatus(TenantStatus.ACTIVE);
         when(tenantRepository.findById(tenantId)).thenReturn(Optional.of(tenant));
-        when(userRepository.findById(teacher.getId())).thenReturn(Optional.of(teacher));
-        when(userRepository.saveAndFlush(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(refreshTokenRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         AuthResponse response = authService.login("teacher@greenvalley.school", "ChangeMe@123", null);

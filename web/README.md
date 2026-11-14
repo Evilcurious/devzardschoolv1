@@ -19,18 +19,18 @@ npm run dev
 
 Vite proxies `/api` to `http://127.0.0.1:8080`. Override with `VITE_API_ORIGIN`.
 
-Open the printed local URL, choose a role, and sign in with a real account.
+Open the printed local URL. `/` is the platform website, `/login` is the single sign-in for every role, `/register` registers a new school, and `/s/GVS` is the demo school's public website.
 
 ## Demo accounts (after backend seed)
 
-| Portal | Username | Password |
+| Role | Username | Password |
 | --- | --- | --- |
-| /admin | erp.owner | Owner@12345 |
-| School Admin | GVS-ADM-0001 | ChangeMe@123 |
+| Platform Owner | erp.owner | Owner@12345 |
+| School Owner | GVS-ADM-0001 | ChangeMe@123 |
+| Branch Admin (Canal Campus) | GVS-ADM-0002 | ChangeMe@123 |
 | Principal | GVS-PRN-0001 | ChangeMe@123 |
 | Teacher | GVS-TCH-0001 | ChangeMe@123 |
 | Account Officer | GVS-ACC-0001 | ChangeMe@123 |
 | Parent | GVS-PAR-0001 | ChangeMe@123 |
-| Student | GVS-STU-0001 | ChangeMe@123 |
 
 School users must change the temporary password (`mustChangePassword`).

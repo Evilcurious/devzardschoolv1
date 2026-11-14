@@ -7,15 +7,9 @@ public final class HttpRequestUtils {
     private HttpRequestUtils() {
     }
 
+    /** Client address. Forwarding headers are honoured only when the request came through a trusted proxy. */
     public static String clientIp(HttpServletRequest request) {
-        if (request == null) {
-            return null;
-        }
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
-        }
-        return request.getRemoteAddr();
+        return com.erpschool.saas.support.ClientIp.of(request);
     }
 
     public static String userAgent(HttpServletRequest request) {

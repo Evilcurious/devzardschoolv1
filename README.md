@@ -2,6 +2,29 @@
 
 Multi-tenant School ERP SaaS: Spring Boot `/api/v1` + the **Atrium** web app in `web/`.
 
+## DEVZARD eSchool: multi-school platform
+
+The ERP now runs as a platform for many schools:
+
+- Public platform website at `/`; each school's own site at `/s/<SCHOOLCODE>`
+- Schools register at `/register` with documents and are verified by the Platform Owner
+- One sign-in at `/login` for every role, with a private school and branch chooser
+- School Owner manages branches, branch admins, staff access, branch passwords and modules
+- Plans with enforced limits on active users, branches and storage
+- Private uploads, rate limiting, and a platform console with real server load
+
+Read these two documents before deploying:
+
+- [docs/SAAS_PLATFORM.md](docs/SAAS_PLATFORM.md): what changed, roles, isolation rules, API, tests, known gaps
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): environment variables, build, Nginx, checks, rollback
+
+End-to-end checks (test database with demo data only; they create throw-away schools):
+
+```bash
+python3 scripts/saas_smoke_test.py   http://127.0.0.1:8080
+python3 scripts/saas_extra_checks.py http://127.0.0.1:8080
+```
+
 ## What is included
 
 Modular Spring Boot 3 monolith with Flyway schema and JWT-secured APIs:
@@ -29,7 +52,7 @@ Modular Spring Boot 3 monolith with Flyway schema and JWT-secured APIs:
 | Framework | Spring Boot 3.4 |
 | Build | Maven |
 | Database | PostgreSQL (Neon) |
-| Migrations | Flyway `V1` + `V2` |
+| Migrations | Flyway `V1` to `V30` |
 | Security | Spring Security + JWT + BCrypt |
 | API docs | springdoc OpenAPI |
 | Mapping / boilerplate | Lombok + MapStruct |

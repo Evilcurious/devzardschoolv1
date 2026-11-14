@@ -94,6 +94,11 @@ public class SubscriptionGuardFilter extends OncePerRequestFilter {
         if ("GET".equals(method) && "/api/v1/tenants/me".equals(path)) {
             return true;
         }
+        if ("GET".equals(method) && (path.equals("/api/v1/school/overview") || path.startsWith("/api/v1/school/application")
+                || path.equals("/api/v1/features"))) {
+            // The owner of a suspended school can still see why, and its plan and usage.
+            return true;
+        }
         if ("GET".equals(method) && "/api/v1/subscriptions/current".equals(path)) {
             return true;
         }

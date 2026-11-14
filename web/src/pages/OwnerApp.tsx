@@ -28,10 +28,10 @@ export default function OwnerApp() {
       <aside className={`sidebar ${open ? "open" : ""}`}>
         <button type="button" className="sidebar-resizer" aria-label="Resize sidebar" onPointerDown={onResizePointerDown} />
         <div className="brand-mark" style={{ marginBottom: 18 }}>
-          <div className="mark">A</div>
+          <div className="mark">D</div>
           <div>
-            ERP Owner
-            <div style={{ fontSize: 12, opacity: 0.65 }}>Platform console</div>
+            Platform Owner
+            <div style={{ fontSize: 12, opacity: 0.65 }}>DEVZARD eSchool</div>
           </div>
         </div>
         <NavLink className="nav-link" to="/admin/app" end onClick={() => setOpen(false)}>
@@ -42,6 +42,19 @@ export default function OwnerApp() {
         </NavLink>
         <NavLink className="nav-link" to="/admin/app/subscriptions" onClick={() => setOpen(false)}>
           Subscriptions
+        </NavLink>
+        <div className="nav-sec" style={{ marginTop: 10 }}>Platform</div>
+        <NavLink className="nav-link" to="/admin/app/platform" onClick={() => setOpen(false)}>
+          Server and usage
+        </NavLink>
+        <NavLink className="nav-link" to="/admin/app/verification" onClick={() => setOpen(false)}>
+          School verification
+        </NavLink>
+        <NavLink className="nav-link" to="/admin/app/plans" onClick={() => setOpen(false)}>
+          Plans
+        </NavLink>
+        <NavLink className="nav-link" to="/admin/app/site" onClick={() => setOpen(false)}>
+          Website
         </NavLink>
         <div className="sidebar-foot">
           <Button kind="ghost" loadingText="Signing out…" onClick={() => logout()}>
@@ -55,7 +68,7 @@ export default function OwnerApp() {
             ☰
           </button>
           <div className="topbar-copy">
-            <div className="crumbs">ERP Owner</div>
+            <div className="crumbs">Platform Owner</div>
             <strong>{user?.fullName}</strong>
           </div>
           <div className="row">

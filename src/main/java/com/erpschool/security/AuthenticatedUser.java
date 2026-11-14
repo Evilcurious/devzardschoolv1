@@ -18,6 +18,7 @@ public class AuthenticatedUser implements UserDetails {
     private final UserRole role;
     private final boolean active;
     private final boolean locked;
+    private final com.erpschool.saas.SaasRole saasRole;
 
     public AuthenticatedUser(UUID id,
                              UUID tenantId,
@@ -26,6 +27,18 @@ public class AuthenticatedUser implements UserDetails {
                              UserRole role,
                              boolean active,
                              boolean locked) {
+        this(id, tenantId, username, passwordHash, role, active, locked, null);
+    }
+
+    public AuthenticatedUser(UUID id,
+                             UUID tenantId,
+                             String username,
+                             String passwordHash,
+                             UserRole role,
+                             boolean active,
+                             boolean locked,
+                             com.erpschool.saas.SaasRole saasRole) {
+        this.saasRole = saasRole;
         this.id = id;
         this.tenantId = tenantId;
         this.username = username;
@@ -43,13 +56,22 @@ public class AuthenticatedUser implements UserDetails {
         return tenantId;
     }
 
+    public com.erpschool.saas.SaasRole getSaasRole() {
+        return saasRole;
+    }
+
     public UserRole getRole() {
         return role;
     }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
+        if (saasRole == null || saasRole.name().equals(role.name())) {
+            return List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
+        }
+        // ERP permission profile + platform role, e.g. ROLE_SCHOOL_ADMIN + ROLE_SCHOOL_OWNER.
+        return List.of(new SimpleGrantedAuthority("ROLE_" + role.name()),
+                new SimpleGrantedAuthority("ROLE_" + saasRole.name()));
     }
 
     @Override

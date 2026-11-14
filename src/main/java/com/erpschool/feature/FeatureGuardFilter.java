@@ -58,7 +58,7 @@ public class FeatureGuardFilter extends OncePerRequestFilter {
                 ApiResponse.fail(ERROR_CODE, "This module is turned off for your school."));
     }
 
-    static SchoolFeature featureFor(String uri) {
+    public static SchoolFeature featureFor(String uri) {
         if (uri == null) {
             return null;
         }

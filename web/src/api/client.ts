@@ -5,6 +5,7 @@ const REFRESH = "atrium.refresh";
 
 export const LOCKED_EVENT = "atrium:subscription-inactive";
 export const AUTH_LOST_EVENT = "atrium:auth-lost";
+export const SCHOOL_GATED_EVENT = "atrium:school-gated";
 
 export class ApiError extends Error {
   status: number;
@@ -23,7 +24,7 @@ export class ApiError extends Error {
 const getInflight = new Map<string, Promise<unknown>>();
 const getTtlCache = new Map<string, { exp: number; data: unknown }>();
 const GET_TTL_MS = 45_000;
-const CACHEABLE_GET = /^\/api\/v1\/(auth\/me|classes|subjects|sections|campuses|tenants\/me|features|settings|school-settings|teacher-assignments|admissions\/config|public\/(school|admission)|notifications(\/unread-count)?|dashboard\/(school|platform)|portals\/(teacher|parent|student|account|principal)|announcements|calendar(\/events)?|homework|online-exams(\/mine)?|exams\/sessions|fees\/(structures|charge-types|me\/challans|children\/challans|challans|proofs\/pending)|reports\/progress\/(me|teacher|children)|students(?:\/[^/?]+)?|users|parents\/me\/children|teacher\/timetable(\/today)?|timetable\/me|attendance\/(me|teachers\/day))(\?|$)/;
+const CACHEABLE_GET = /^\/api\/v1\/(auth\/me|public\/site|classes|subjects|sections|campuses|tenants\/me|features|settings|school-settings|teacher-assignments|admissions\/config|public\/(school|admission)|notifications(\/unread-count)?|dashboard\/(school|platform)|portals\/(teacher|parent|student|account|principal)|announcements|calendar(\/events)?|homework|online-exams(\/mine)?|exams\/sessions|fees\/(structures|charge-types|me\/challans|children\/challans|challans|proofs\/pending)|reports\/progress\/(me|teacher|children)|students(?:\/[^/?]+)?|users|parents\/me\/children|teacher\/timetable(\/today)?|timetable\/me|attendance\/(me|teachers\/day))(\?|$)/;
 let authEpoch = 0;
 
 export function getAccessToken() {
@@ -156,6 +157,7 @@ async function send<T>(
     res.status === 401 &&
     retry &&
     !path.includes("/auth/login") &&
+    !path.includes("/auth/select") &&
     !path.includes("/auth/refresh") &&
     !path.includes("/auth/logout") &&
     !path.includes("/auth/change-password")
@@ -182,6 +184,10 @@ async function send<T>(
   if (!res.ok) {
     if (res.status === 403 && json && (json as ApiErrorBody).errorCode === "SUBSCRIPTION_INACTIVE") {
       window.dispatchEvent(new Event(LOCKED_EVENT));
+    }
+    const gate = res.status === 403 && json ? (json as ApiErrorBody).errorCode : undefined;
+    if (gate === "SCHOOL_NOT_VERIFIED" || gate === "SCHOOL_SUSPENDED") {
+      window.dispatchEvent(new Event(SCHOOL_GATED_EVENT));
     }
     throw new ApiError(res.status, (json as ApiErrorBody) || text || res.statusText);
   }
@@ -262,6 +268,7 @@ export const api = {
   patch: <T>(path: string, body?: unknown) =>
     request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
   del: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  form: <T>(path: string, body: FormData, method: "POST" | "PUT" = "POST") => request<T>(path, { method, body }),
   upload: <T>(path: string, file: File, onProgress?: (pct: number) => void) => {
     validateUpload(file);
     const fd = new FormData();

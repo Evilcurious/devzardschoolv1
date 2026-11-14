@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { publicAdmissionApi } from "../api/services";
 import { useBranding } from "../lib/branding";
+import { schoolPath } from "../lib/routes";
 import { contactFor } from "../lib/site";
 import { Button, Empty, ErrorBox, Field, Form, QueryState, useAsync } from "../ui/kit";
 import { CampusContact, WhatsAppFloat } from "../ui/CampusContact";
@@ -107,7 +108,7 @@ export default function ApplyAdmission() {
   return (
     <div className="site apply-page">
       <header className="site-nav apply-nav">
-        <Link to="/" className="site-brand">
+        <Link to={schoolPath(school?.code)} className="site-brand">
           {school?.logoUrl ? <img src={school.logoUrl} alt="" /> : <div className="mark">{(school?.name || "S").charAt(0)}</div>}
           <div>
             <strong>{school?.name || "School"}</strong>
@@ -120,8 +121,8 @@ export default function ApplyAdmission() {
               {campusOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           ) : null}
-          <Link to="/portals" className="btn ghost sm site-nav-portal">School Portal</Link>
-          <Link to="/" className="btn ghost sm">Website</Link>
+          <Link to="/login" className="btn ghost sm site-nav-portal">School Portal</Link>
+          <Link to={schoolPath(school?.code)} className="btn ghost sm">Website</Link>
         </div>
       </header>
       <section className="site-section apply-layout">
@@ -138,7 +139,7 @@ export default function ApplyAdmission() {
                 {done.appointment ? (
                   <p>Appointment {slotLabel(String((done.appointment as { slotStart?: string }).slotStart || ""))}</p>
                 ) : null}
-                <Link to="/" className="btn brass">Return home</Link>
+                <Link to={schoolPath(school?.code)} className="btn brass">Return home</Link>
               </div>
             ) : !fields.length ? (
               <Empty title="The school has not published an admission form" />

@@ -530,6 +530,22 @@ public class UserService {
             );
         }
 
+        // Branch isolation by id: a session inside one branch cannot open staff of another
+        // branch or school-wide accounts (owner, school admins). Portal accounts without a
+        // branch stay reachable because they are tied to students, not to a branch.
+        if (CampusScope.restricts()
+                && !user.getId().equals(TenantContext.getUserId())) {
+            UUID branch = user.getCampusId();
+            boolean portal = user.getRole() == UserRole.PARENT || user.getRole() == UserRole.STUDENT;
+            boolean visible = branch == null ? portal : branch.equals(CampusScope.current());
+            if (!visible) {
+                throw new ResourceNotFoundException(
+                        "User",
+                        id
+                );
+            }
+        }
+
         return user;
     }
 

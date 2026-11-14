@@ -1,16 +1,20 @@
 import type { Role } from "./types";
+import type { SaasRole } from "../api/saas";
 
 export interface NavItem {
   to: string;
   label: string;
   roles: Role[];
+  /** When set, the item also needs one of these platform roles. */
+  saas?: SaasRole[];
 }
 
 export const SCHOOL_NAV: NavItem[] = [
   { to: "/app", label: "Dashboard", roles: ["SCHOOL_ADMIN", "PRINCIPAL", "TEACHER", "ACCOUNT_OFFICER", "PARENT", "STUDENT"] },
   { to: "/app/students", label: "Students", roles: ["SCHOOL_ADMIN", "PRINCIPAL", "TEACHER", "ACCOUNT_OFFICER"] },
   { to: "/app/users", label: "Users", roles: ["SCHOOL_ADMIN", "PRINCIPAL"] },
-  { to: "/app/campuses", label: "Campuses", roles: ["SCHOOL_ADMIN"] },
+  { to: "/app/branches", label: "Branches", roles: ["SCHOOL_ADMIN", "PRINCIPAL"], saas: ["SCHOOL_OWNER", "SCHOOL_ADMIN", "BRANCH_ADMIN"] },
+  { to: "/app/campuses", label: "Campus pages", roles: ["SCHOOL_ADMIN"] },
   { to: "/app/academics", label: "Academics", roles: ["SCHOOL_ADMIN", "PRINCIPAL"] },
   { to: "/app/timetable", label: "Timetable", roles: ["SCHOOL_ADMIN", "PRINCIPAL", "TEACHER", "STUDENT", "PARENT"] },
   { to: "/app/attendance", label: "Attendance", roles: ["SCHOOL_ADMIN", "PRINCIPAL", "TEACHER", "PARENT", "STUDENT"] },
@@ -28,6 +32,7 @@ export const SCHOOL_NAV: NavItem[] = [
   { to: "/app/calendar", label: "Calendar", roles: ["SCHOOL_ADMIN", "PRINCIPAL", "TEACHER", "PARENT", "STUDENT", "ACCOUNT_OFFICER"] },
   { to: "/app/reports", label: "Reports", roles: ["SCHOOL_ADMIN", "PRINCIPAL", "ACCOUNT_OFFICER"] },
   { to: "/app/settings", label: "Settings", roles: ["SCHOOL_ADMIN", "ACCOUNT_OFFICER"] },
+  { to: "/app/plan", label: "Plan & usage", roles: ["SCHOOL_ADMIN", "PRINCIPAL"], saas: ["SCHOOL_OWNER", "SCHOOL_ADMIN"] },
   { to: "/app/billing", label: "Subscription", roles: ["SCHOOL_ADMIN"] },
   { to: "/app/notifications", label: "Notifications", roles: ["SCHOOL_ADMIN", "PRINCIPAL", "TEACHER", "ACCOUNT_OFFICER", "PARENT", "STUDENT"] },
   { to: "/app/password", label: "Password", roles: ["SCHOOL_ADMIN", "PRINCIPAL", "TEACHER", "ACCOUNT_OFFICER", "PARENT", "STUDENT"] },

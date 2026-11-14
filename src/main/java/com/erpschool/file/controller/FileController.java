@@ -30,7 +30,11 @@ public class FileController {
 
     private final FileStorageService fileStorageService;
 
-    public FileController(FileStorageService fileStorageService) {
+    private final com.erpschool.saas.security.FileAccessService fileAccess;
+
+    public FileController(FileStorageService fileStorageService,
+                          com.erpschool.saas.security.FileAccessService fileAccess) {
+        this.fileAccess = fileAccess;
         this.fileStorageService = fileStorageService;
     }
 
@@ -40,7 +44,8 @@ public class FileController {
     }
 
     @GetMapping("/{tenantId}/{name}")
-    public ResponseEntity<Resource> download(@PathVariable UUID tenantId, @PathVariable String name) throws Exception {
+    public ResponseEntity<Resource> download(@PathVariable UUID tenantId, @PathVariable String name,
+                                             jakarta.servlet.http.HttpServletRequest request) throws Exception {
         if (name == null || name.isBlank()) {
             return ResponseEntity.notFound().build();
         }
@@ -51,6 +56,12 @@ public class FileController {
             return ResponseEntity.notFound().build();
         }
         if (namePath.getNameCount() != 1 || namePath.isAbsolute()) {
+            return ResponseEntity.notFound().build();
+        }
+        // Private by default: members of the owning school, the platform owner, or
+        // media the school published on its own website. Everything else gets the
+        // same 404 as a file that does not exist.
+        if (!fileAccess.canRead(request, tenantId, name)) {
             return ResponseEntity.notFound().build();
         }
         Path path = fileStorageService.resolvePublic(tenantId, name);

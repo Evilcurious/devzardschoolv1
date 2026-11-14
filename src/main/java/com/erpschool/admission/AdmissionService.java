@@ -58,6 +58,7 @@ public class AdmissionService {
     private final AdmissionAppointmentRepository appointmentRepository;
     private final TenantRepository tenantRepository;
     private final CampusRepository campusRepository;
+    private final com.erpschool.saas.access.PublicSchoolResolver publicResolver;
     private final FeatureService featureService;
     private final CatalogCache catalogCache;
     private final ObjectMapper objectMapper;
@@ -71,7 +72,9 @@ public class AdmissionService {
                             CampusRepository campusRepository,
                             FeatureService featureService,
                             CatalogCache catalogCache,
-                            ObjectMapper objectMapper) {
+                            ObjectMapper objectMapper,
+                            com.erpschool.saas.access.PublicSchoolResolver publicResolver) {
+        this.publicResolver = publicResolver;
         this.settingsRepository = settingsRepository;
         this.fieldRepository = fieldRepository;
         this.periodRepository = periodRepository;
@@ -104,7 +107,8 @@ public class AdmissionService {
         Map<String, Object> out = new LinkedHashMap<>(summary);
         out.put("schoolName", tenant.getName());
         out.put("schoolCode", tenant.getCode());
-        out.put("campuses", campusRepository.findByTenantIdOrderByNameAsc(tenant.getId()).stream()
+        out.put("campuses", publicResolver.publicBranches(tenant,
+                        campusRepository.findByTenantIdOrderByNameAsc(tenant.getId())).stream()
                 .map(c -> Map.of("id", c.getId(), "name", c.getName(), "code", c.getCode()))
                 .toList());
         if (!Boolean.TRUE.equals(summary.get("enabled"))) {
@@ -577,13 +581,7 @@ public class AdmissionService {
     }
 
     private Tenant resolveSchool(String code) {
-        if (code != null && !code.isBlank()) {
-            return tenantRepository.findByCodeIgnoreCase(code.trim())
-                    .orElseThrow(() -> new ResourceNotFoundException("School", code));
-        }
-        return tenantRepository.findFirstByStatusInOrderByCreatedAtAsc(
-                        List.of(TenantStatus.ACTIVE, TenantStatus.PENDING))
-                .orElseThrow(() -> new ResourceNotFoundException("No school is configured yet"));
+        return publicResolver.resolve(code);
     }
 
     private void requireCampus(UUID tenantId, UUID campusId) {

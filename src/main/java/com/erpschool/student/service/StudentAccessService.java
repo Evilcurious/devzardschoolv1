@@ -7,6 +7,7 @@ import com.erpschool.common.util.TenantGuard;
 import com.erpschool.student.entity.Student;
 import com.erpschool.student.repository.ParentStudentRepository;
 import com.erpschool.student.repository.StudentRepository;
+import com.erpschool.tenant.context.CampusScope;
 import com.erpschool.tenant.context.TenantContext;
 import com.erpschool.user.entity.UserRole;
 import org.springframework.stereotype.Service;
@@ -38,6 +39,12 @@ public class StudentAccessService {
 
     public void assertCanView(Student student) {
         UserRole role = TenantContext.getRole();
+        // Branch isolation by id: a session that is inside one branch can never open a
+        // student of another branch, even with a valid id. Answer as if it does not exist.
+        if (CampusScope.restricts() && student.getCampusId() != null
+                && !student.getCampusId().equals(CampusScope.current())) {
+            throw new ResourceNotFoundException("Student", student.getId());
+        }
         if (role == UserRole.STUDENT) {
             if (student.getUserId() == null || !student.getUserId().equals(TenantContext.getUserId())) {
                 throw new ForbiddenException("Students can only access their own record");

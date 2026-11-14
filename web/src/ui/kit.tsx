@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { ApiError, openAuthedFile } from "../api/client";
 import { pretty, statusTone } from "../lib/format";
@@ -187,10 +188,18 @@ export function Modal({
   onClose: () => void;
   children: ReactNode;
 }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
   if (!open) return null;
-  return (
+  // Rendered on <body>: a dialog opened from the top bar (which has a backdrop
+  // filter) would otherwise be positioned inside the bar and cut off.
+  return createPortal(
     <div className="modal-back" onClick={onClose} role="presentation">
-      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog">
+      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
         <div className="page-title">
           <h2 style={{ margin: 0, fontSize: 24 }}>{title}</h2>
           <Button kind="ghost" onClick={onClose}>
@@ -199,7 +208,8 @@ export function Modal({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

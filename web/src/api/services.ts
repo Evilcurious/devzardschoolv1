@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { publicSchoolCode } from "../lib/routes";
 import type {
   Announcement,
   AuthPayload,
@@ -60,11 +61,11 @@ export const authApi = {
 };
 
 export const publicApi = {
-  school: (code?: string) =>
+  school: (code: string | undefined = publicSchoolCode()) =>
     api.get<{ school: import("../lib/branding").PublicSchool; campuses: import("../lib/branding").PublicCampus[] }>(
       `${v1}/public/school${code ? `?code=${encodeURIComponent(code)}` : ""}`,
     ),
-  contact: (body: Record<string, unknown>, code?: string) =>
+  contact: (body: Record<string, unknown>, code: string | undefined = publicSchoolCode()) =>
     api.post<{ accepted?: boolean; message?: string }>(
       `${v1}/public/contact${code ? `?code=${encodeURIComponent(code)}` : ""}`,
       body,
@@ -104,7 +105,7 @@ export const admissionApi = {
 };
 
 export const publicAdmissionApi = {
-  form: (code?: string) =>
+  form: (code: string | undefined = publicSchoolCode()) =>
     api.get<{
       enabled?: boolean;
       ctaLabel?: string;
@@ -114,17 +115,20 @@ export const publicAdmissionApi = {
       fields?: Record<string, unknown>[];
       campuses?: { id: string; name: string; code?: string }[];
     }>(`${v1}/public/admission${code ? `?code=${encodeURIComponent(code)}` : ""}`),
-  slots: (code: string | undefined, date: string, campusId?: string) => {
+  slots: (given: string | undefined, date: string, campusId?: string) => {
+    const code = given || publicSchoolCode();
     const p = new URLSearchParams({ date });
     if (code) p.set("code", code);
     if (campusId) p.set("campusId", campusId);
     return api.get<{ start: string; end: string; booked?: boolean }[]>(`${v1}/public/admission/slots?${p}`);
   },
-  submit: (code: string | undefined, body: Record<string, unknown>) =>
-    api.post<Record<string, unknown>>(
+  submit: (given: string | undefined, body: Record<string, unknown>) => {
+    const code = given || publicSchoolCode();
+    return api.post<Record<string, unknown>>(
       `${v1}/public/admission${code ? `?code=${encodeURIComponent(code)}` : ""}`,
       body,
-    ),
+    );
+  },
 };
 
 export const tenantApi = {

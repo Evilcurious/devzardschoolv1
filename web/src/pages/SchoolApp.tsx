@@ -12,6 +12,9 @@ import { useSidebarWidth } from "../lib/sidebar";
 import { SCHOOL_NAV } from "../lib/nav";
 import { prefetchRoute } from "../lib/prefetch";
 import Locked from "./Locked";
+import SchoolStatus from "./SchoolStatus";
+import ContextSwitcher from "../ui/ContextSwitcher";
+import { SAAS_ROLE_LABEL } from "../api/saas";
 import ChangePassword from "./ChangePassword";
 import { Button, ErrorBox, Loading } from "../ui/kit";
 import UserMenu from "../ui/UserMenu";
@@ -19,14 +22,14 @@ import ErrorBoundary from "../ui/ErrorBoundary";
 
 const NAV_GROUPS: { label: string; tos: string[] }[] = [
   { label: "Home", tos: ["/app", "/app/notifications", "/app/password"] },
-  { label: "People", tos: ["/app/students", "/app/users", "/app/campuses"] },
+  { label: "People", tos: ["/app/students", "/app/users", "/app/branches", "/app/campuses"] },
   { label: "Academics", tos: ["/app/academics", "/app/timetable", "/app/attendance", "/app/teacher-attendance", "/app/homework", "/app/exams", "/app/date-sheets", "/app/online-exams", "/app/remarks"] },
-  { label: "Finance", tos: ["/app/fees", "/app/salaries", "/app/reports", "/app/billing"] },
+  { label: "Finance", tos: ["/app/fees", "/app/salaries", "/app/reports", "/app/plan", "/app/billing"] },
   { label: "School", tos: ["/app/website", "/app/admissions", "/app/announcements", "/app/calendar", "/app/settings"] },
 ];
 
 export default function SchoolApp() {
-  const { user, tenant, locked, logout } = useSession();
+  const { user, tenant, locked, logout, context, verification } = useSession();
   const { school } = useBranding();
   const { on } = useFeatures();
   const { onResizePointerDown } = useSidebarWidth();
@@ -65,10 +68,15 @@ export default function SchoolApp() {
   if (!user) return <Navigate to={LOGIN_PORTALS} replace />;
   if (user.role === "ERP_OWNER") return <Navigate to="/admin/app" replace />;
   if (user.mustChangePassword && loc.pathname !== "/app/password") return <ChangePassword />;
+  // An unverified, rejected or suspended school never reaches the ERP. The server
+  // refuses the same requests; this screen explains why and what to do next.
+  if (verification && verification !== "VERIFIED") return <SchoolStatus status={verification} />;
   if (locked && loc.pathname !== "/app/billing") return <Locked />;
 
   const role = user.role;
-  const items = SCHOOL_NAV.filter((i) => i.roles.includes(role) && on(PATH_FEATURE[i.to]));
+  const items = SCHOOL_NAV.filter((i) =>
+    i.roles.includes(role) && on(PATH_FEATURE[i.to]) && (!i.saas || (context ? i.saas.includes(context.role) : false)));
+  const roleName = context ? SAAS_ROLE_LABEL[context.role] || role.replaceAll("_", " ") : role.replaceAll("_", " ");
   const current = items.find((i) => i.to === loc.pathname)
     || items.filter((i) => i.to !== "/app" && loc.pathname.startsWith(i.to)).sort((a, b) => b.to.length - a.to.length)[0];
 
@@ -109,10 +117,11 @@ export default function SchoolApp() {
               ☰
             </button>
             <div className="topbar-copy">
-              <div className="crumbs">{role.replaceAll("_", " ")}{current ? ` · ${current.label}` : ""}</div>
+              <div className="crumbs">{roleName}{current ? ` · ${current.label}` : ""}</div>
               <strong>{user.fullName}</strong>
             </div>
             <div className="row">
+              <ContextSwitcher />
               <ThemeToggle />
               <UserMenu passwordTo="/app/password" />
             </div>

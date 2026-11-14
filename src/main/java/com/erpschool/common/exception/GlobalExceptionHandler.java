@@ -82,6 +82,10 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<Void>> handleDataIntegrity(DataIntegrityViolationException ex) {
+        ResponseEntity<ApiResponse<Void>> guard = planGuard(ex);
+        if (guard != null) {
+            return guard;
+        }
         String detail = ex.getMostSpecificCause() == null ? "" : ex.getMostSpecificCause().getMessage();
         String lower = detail == null ? "" : detail.toLowerCase();
         if (lower.contains("uq_admission_app_active_cnic")) {
@@ -133,6 +137,10 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataAccessException.class)
     public ResponseEntity<ApiResponse<Void>> handleDataAccess(DataAccessException ex, HttpServletRequest request) {
+        ResponseEntity<ApiResponse<Void>> guard = planGuard(ex);
+        if (guard != null) {
+            return guard;
+        }
         log.error("Database error on {} {}", request.getMethod(), request.getRequestURI(), ex);
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(ApiResponse.fail("DATABASE_UNAVAILABLE", "The database is unavailable. Try again shortly."));
@@ -140,9 +148,48 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleUnknown(Exception ex, HttpServletRequest request) {
+        ResponseEntity<ApiResponse<Void>> guard = planGuard(ex);
+        if (guard != null) {
+            return guard;
+        }
         log.error("Unhandled error on {} {}", request.getMethod(), request.getRequestURI(), ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponse.fail("INTERNAL_ERROR", "An unexpected error occurred"));
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTooLarge(
+            org.springframework.web.multipart.MaxUploadSizeExceededException ex) {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(ApiResponse.fail("FILE_TOO_LARGE", "That upload is too large. Please choose a smaller file."));
+    }
+
+    @ExceptionHandler(com.erpschool.saas.registration.RegistrationService.RegistrationInvalidException.class)
+    public ResponseEntity<ApiResponse<Void>> handleRegistrationInvalid(
+            com.erpschool.saas.registration.RegistrationService.RegistrationInvalidException ex) {
+        java.util.List<ApiResponse.FieldError> errors = ex.getErrors().entrySet().stream()
+                .map(e -> ApiResponse.FieldError.builder().field(e.getKey()).message(e.getValue()).build())
+                .toList();
+        return ResponseEntity.badRequest().body(ApiResponse.fail("VALIDATION_FAILED", ex.getMessage(), errors));
+    }
+
+    /**
+     * The database refuses a new user or branch beyond the school's plan with
+     * SQLSTATE DZ001 / DZ002 (see migration V30). Whatever ERP code path hit the
+     * guard, the caller gets the same clear 409 instead of a generic error.
+     */
+    private ResponseEntity<ApiResponse<Void>> planGuard(Throwable ex) {
+        Throwable cause = ex;
+        for (int depth = 0; cause != null && depth < 12; depth++) {
+            if (cause instanceof java.sql.SQLException sql && sql.getSQLState() != null
+                    && ("DZ001".equals(sql.getSQLState()) || "DZ002".equals(sql.getSQLState()))) {
+                ApiException api = com.erpschool.saas.limits.LimitService.fromGuard(sql.getSQLState(), sql.getMessage());
+                return ResponseEntity.status(api.getStatus())
+                        .body(ApiResponse.fail(api.getErrorCode(), api.getMessage()));
+            }
+            cause = cause.getCause();
+        }
+        return null;
     }
 
     private ApiResponse.FieldError toFieldError(FieldError error) {

@@ -31,6 +31,8 @@ public class TenantResponse {
     private final String tagline;
     private final String website;
     private final TenantStatus status;
+    /** PENDING, UNDER_REVIEW, VERIFIED, REJECTED or SUSPENDED. The ERP is usable only when VERIFIED. */
+    private final String verificationStatus;
     private final String academicYear;
     private final String academicSession;
     private final String timezone;
@@ -59,6 +61,7 @@ public class TenantResponse {
                 .tagline(tenant.getTagline())
                 .website(tenant.getWebsite())
                 .status(tenant.getStatus())
+                .verificationStatus(tenant.getVerificationStatus())
                 .academicYear(tenant.getAcademicYear())
                 .academicSession(tenant.getAcademicSession())
                 .timezone(tenant.getTimezone())

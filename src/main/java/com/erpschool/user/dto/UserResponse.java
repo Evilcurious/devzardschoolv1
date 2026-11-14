@@ -28,6 +28,29 @@ public class UserResponse {
     private final Instant lastLoginAt;
     private final Instant createdAt;
 
+    /**
+     * The account as seen inside one session context: school, branch and ERP
+     * role come from the server-resolved membership, not from the home columns.
+     */
+    public static UserResponse from(User user, UUID tenantId, UUID campusId, UserRole role) {
+        return UserResponse.builder()
+                .id(user.getId())
+                .tenantId(tenantId)
+                .campusId(campusId)
+                .username(user.getUsername())
+                .email(user.getEmail())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .fullName(user.getFullName())
+                .phone(user.getPhone())
+                .role(role)
+                .status(user.getStatus())
+                .mustChangePassword(user.isMustChangePassword())
+                .lastLoginAt(user.getLastLoginAt())
+                .createdAt(user.getCreatedAt())
+                .build();
+    }
+
     public static UserResponse from(User user) {
         return UserResponse.builder()
                 .id(user.getId())
